@@ -4242,7 +4242,7 @@
                     <h1 class="header-title">계미 푸드</h1>
                 </div>
                 <button class="settings-btn" aria-label="프로필" onclick="showScreen('profile')">
-                    <img src="https://i.imgur.com/cNUoh7E.png" alt="설정">
+                    <img src="https://i.imgur.com/CHrwWb6.png" alt="설정">
                 </button>
             </div>
         </header>
@@ -4251,8 +4251,8 @@
         <main class="main-content">
             <!-- 제목 섹션 -->
             <div class="title-section">
-                <h2 class="title-line">드신 메뉴를</h2>
-                <h2 class="title-line">기록해주세요!</h2>
+                <h2 class="title-line">계원예대생의 맛집을</h2>
+                <h2 class="title-line">공유해주세요</h2>
             </div>
 
             <!-- 카테고리 버튼 그리드 -->
@@ -4352,7 +4352,7 @@
                     <h1 class="header-title">계미 푸드</h1>
                 </div>
                 <button class="settings-btn" aria-label="프로필" onclick="showScreen('profile')">
-                    <img src="https://i.imgur.com/cNUoh7E.png" alt="설정">
+                    <img src="https://i.imgur.com/CHrwWb6.png" alt="설정">
                 </button>
             </div>
         </header>
@@ -5447,7 +5447,7 @@
                     <h1 class="header-title">계미 푸드</h1>
                 </div>
                 <button class="settings-btn" aria-label="프로필" onclick="showScreen('profile')">
-                    <img src="https://i.imgur.com/cNUoh7E.png" alt="설정">
+                    <img src="https://i.imgur.com/CHrwWb6.png" alt="설정">
                 </button>
             </div>
         </header>
@@ -6159,6 +6159,9 @@
                 comments.push(comment);
                 localStorage.setItem(this.storageKey, JSON.stringify(comments));
                 
+                // 실시간 동기화를 위한 변경 플래그 설정
+                localStorage.setItem('gyemi_comments_updated', Date.now().toString());
+                
                 return { success: true, comment };
             },
             
@@ -6180,6 +6183,9 @@
                 
                 const filtered = comments.filter(c => c.id !== commentId);
                 localStorage.setItem(this.storageKey, JSON.stringify(filtered));
+                
+                // 실시간 동기화를 위한 변경 플래그 설정
+                localStorage.setItem('gyemi_comments_updated', Date.now().toString());
                 
                 return { success: true };
             }
@@ -10054,6 +10060,104 @@
         // 전역 함수로 등록 (onclick에서 사용하기 위해)
         window.deleteComment = deleteComment;
         
+        // ============================================
+        // 🔄 댓글 실시간 동기화 기능
+        // ============================================
+        
+        let commentSyncInterval = null;
+        let lastCommentUpdateTime = 0;
+        
+        // 댓글 실시간 동기화 초기화
+        function initCommentRealtimeSync() {
+            // storage 이벤트 리스너: 다른 탭/창에서 localStorage 변경 감지
+            window.addEventListener('storage', function(e) {
+                if (e.key === CommentManager.storageKey || e.key === 'gyemi_comments_updated') {
+                    // 트렌드 화면이 활성화되어 있을 때만 댓글 업데이트
+                    const trendScreen = document.getElementById('trendScreen');
+                    if (trendScreen && trendScreen.classList.contains('active')) {
+                        console.log('다른 탭에서 댓글이 변경되었습니다. 댓글 목록을 업데이트합니다.');
+                        loadComments();
+                    }
+                }
+            });
+            
+            // 주기적 폴링: 2초마다 댓글 목록 확인 및 업데이트
+            if (commentSyncInterval) {
+                clearInterval(commentSyncInterval);
+            }
+            
+            commentSyncInterval = setInterval(function() {
+                // 트렌드 화면이 활성화되어 있을 때만 확인
+                const trendScreen = document.getElementById('trendScreen');
+                if (trendScreen && trendScreen.classList.contains('active')) {
+                    const updateTime = localStorage.getItem('gyemi_comments_updated');
+                    if (updateTime && parseInt(updateTime) > lastCommentUpdateTime) {
+                        console.log('댓글이 업데이트되었습니다. 댓글 목록을 새로고침합니다.');
+                        lastCommentUpdateTime = parseInt(updateTime);
+                        loadComments();
+                    }
+                }
+            }, 2000); // 2초마다 확인
+            
+            // 초기 업데이트 시간 설정
+            const initialUpdateTime = localStorage.getItem('gyemi_comments_updated');
+            if (initialUpdateTime) {
+                lastCommentUpdateTime = parseInt(initialUpdateTime);
+            }
+        }
+        
+        // 댓글 저장/삭제 시 로컬 탭에서도 즉시 업데이트되도록 수정
+        const originalSaveComment = CommentManager.saveComment;
+        CommentManager.saveComment = function(commentData) {
+            const result = originalSaveComment.call(this, commentData);
+            if (result.success) {
+                // 로컬 탭에서도 즉시 업데이트
+                const trendScreen = document.getElementById('trendScreen');
+                if (trendScreen && trendScreen.classList.contains('active')) {
+                    loadComments();
+                }
+            }
+            return result;
+        };
+        
+        const originalDeleteComment = CommentManager.deleteComment;
+        CommentManager.deleteComment = function(commentId) {
+            const result = originalDeleteComment.call(this, commentId);
+            if (result.success) {
+                // 로컬 탭에서도 즉시 업데이트
+                const trendScreen = document.getElementById('trendScreen');
+                if (trendScreen && trendScreen.classList.contains('active')) {
+                    loadComments();
+                }
+            }
+            return result;
+        };
+        
+        // 페이지 로드 시 실시간 동기화 초기화
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initCommentRealtimeSync);
+        } else {
+            initCommentRealtimeSync();
+        }
+        
+        // 화면 전환 시에도 실시간 동기화 확인
+        const originalShowScreen = window.showScreen;
+        if (originalShowScreen) {
+            window.showScreen = function(screenId) {
+                originalShowScreen(screenId);
+                // 트렌드 화면으로 전환될 때 댓글 동기화 확인
+                if (screenId === 'trend') {
+                    setTimeout(function() {
+                        const updateTime = localStorage.getItem('gyemi_comments_updated');
+                        if (updateTime) {
+                            lastCommentUpdateTime = parseInt(updateTime);
+                        }
+                        loadComments();
+                    }, 100);
+                }
+            };
+        }
+        
         // 문의함 기능
         async function submitInquiry(title, content, titleId = 'inquiryTitle', contentId = 'inquiryContent') {
             console.log('submitInquiry 호출됨:', { title, content, titleId, contentId });
@@ -12063,24 +12167,36 @@
         const RandomRecommendManager = {
             storageKey: 'gyemi_random_recommend',
             
-            // 오늘 사용했는지 확인
-            hasUsedToday() {
+            // 오늘 사용 횟수 가져오기
+            getTodayUsageCount() {
                 const data = localStorage.getItem(this.storageKey);
-                if (!data) return false;
+                if (!data) return 0;
                 
                 try {
                     const parsed = JSON.parse(data);
                     const today = new Date().toDateString();
-                    return parsed.date === today;
+                    if (parsed.date === today) {
+                        return parsed.count || 0;
+                    }
+                    return 0;
                 } catch (e) {
-                    return false;
+                    return 0;
                 }
             },
             
-            // 사용 기록 저장
+            // 오늘 사용했는지 확인 (레거시 호환)
+            hasUsedToday() {
+                return this.getTodayUsageCount() > 0;
+            },
+            
+            // 사용 기록 저장 (횟수 증가)
             markAsUsed() {
                 const today = new Date().toDateString();
-                localStorage.setItem(this.storageKey, JSON.stringify({ date: today }));
+                const currentCount = this.getTodayUsageCount();
+                localStorage.setItem(this.storageKey, JSON.stringify({ 
+                    date: today, 
+                    count: currentCount + 1 
+                }));
             },
             
             // 사용 기록 초기화 (테스트용)
@@ -12100,12 +12216,32 @@
                 return;
             }
             
-            // 하루 1회 제한 체크 (고수 레벨 이상은 제한 없음)
+            // 레벨별 제한 체크
             const userLevel = user.level || 1;
-            const isHighLevel = userLevel >= 3; // 고수 레벨 이상
+            const todayUsageCount = RandomRecommendManager.getTodayUsageCount();
             
-            if (!isHighLevel && RandomRecommendManager.hasUsedToday()) {
-                showToast('하루에 한 번만 랜덤 추천을 받을 수 있습니다.\n고수 레벨 이상은 여러 번 이용 가능합니다.', 'error');
+            // 레벨별 제한 설정
+            let maxDailyUsage = 2; // 기본값: 레벨 1은 하루 2번
+            if (userLevel >= 3) {
+                // 고수 레벨 3단계 이상: 무제한
+                maxDailyUsage = Infinity;
+            } else if (userLevel >= 2) {
+                // 미식가 레벨 2단계: 하루 10번
+                maxDailyUsage = 10;
+            } else {
+                // 레벨 1: 하루 2번
+                maxDailyUsage = 2;
+            }
+            
+            // 제한 체크
+            if (todayUsageCount >= maxDailyUsage) {
+                if (userLevel < 3) {
+                    if (maxDailyUsage === Infinity) {
+                        // 무제한인 경우는 여기 도달하지 않음
+                    } else {
+                        showToast(`하루에 ${maxDailyUsage}번만 랜덤 추천을 받을 수 있습니다.\n미식가 레벨 2단계는 10번, 고수 레벨 3단계 이상은 무제한 이용 가능합니다.`, 'error');
+                    }
+                }
                 return;
             }
             
@@ -12127,10 +12263,8 @@
             randomSection.classList.add('hide-content');
             randomResult.classList.add('show');
             
-            // 사용 기록 저장 (고수 레벨 이상은 저장하지 않음)
-            if (!isHighLevel) {
-                RandomRecommendManager.markAsUsed();
-            }
+            // 사용 기록 저장 (모든 레벨에서 저장, 고수 레벨은 무제한이지만 통계용으로 저장)
+            RandomRecommendManager.markAsUsed();
         }
 
         // 랜덤 추천 초기화 (다시 버튼으로 돌아가기)
@@ -12170,16 +12304,29 @@
                 } else {
                     // 로그인한 경우
                     const userLevel = user.level || 1;
-                    const isHighLevel = userLevel >= 3; // 고수 레벨 이상
-                    const hasUsedToday = RandomRecommendManager.hasUsedToday();
+                    const todayUsageCount = RandomRecommendManager.getTodayUsageCount();
                     
-                    if (!isHighLevel && hasUsedToday) {
-                        // 하루 1회 사용 완료
+                    // 레벨별 제한 설정
+                    let maxDailyUsage = 2; // 기본값: 레벨 1은 하루 2번
+                    if (userLevel >= 3) {
+                        maxDailyUsage = Infinity; // 고수 레벨 3단계 이상: 무제한
+                    } else if (userLevel >= 2) {
+                        maxDailyUsage = 10; // 미식가 레벨 2단계: 하루 10번
+                    } else {
+                        maxDailyUsage = 2; // 레벨 1: 하루 2번
+                    }
+                    
+                    if (todayUsageCount >= maxDailyUsage) {
+                        // 제한 횟수 도달
                         randomBtn.disabled = true;
                         randomBtn.style.opacity = '0.5';
                         randomBtn.style.cursor = 'not-allowed';
                         if (randomSubtitle) {
-                            randomSubtitle.textContent = '오늘 이미 사용했습니다. 고수 레벨 이상은 여러 번 이용 가능합니다.';
+                            if (userLevel >= 3) {
+                                randomSubtitle.textContent = '랜덤으로 메뉴를 추천해드려요 (무제한)';
+                            } else {
+                                randomSubtitle.textContent = `오늘 ${maxDailyUsage}번 사용했습니다. 미식가 레벨 2단계는 10번, 고수 레벨 3단계 이상은 무제한 이용 가능합니다.`;
+                            }
                             randomSubtitle.style.color = '#EF4444';
                         }
                     } else {
@@ -12188,10 +12335,11 @@
                         randomBtn.style.opacity = '1';
                         randomBtn.style.cursor = 'pointer';
                         if (randomSubtitle) {
-                            if (isHighLevel) {
-                                randomSubtitle.textContent = '랜덤으로 메뉴를 추천해드려요 (고수 레벨: 여러 번 이용 가능)';
+                            if (userLevel >= 3) {
+                                randomSubtitle.textContent = '랜덤으로 메뉴를 추천해드려요 (무제한)';
                             } else {
-                                randomSubtitle.textContent = '랜덤으로 메뉴를 추천해드려요 (하루 1회)';
+                                const remaining = maxDailyUsage - todayUsageCount;
+                                randomSubtitle.textContent = `랜덤으로 메뉴를 추천해드려요 (오늘 ${remaining}번 남음)`;
                             }
                             randomSubtitle.style.color = '#4B5563';
                         }
@@ -12256,14 +12404,29 @@
                     }
                     
                     const userLevel = user.level || 1;
-                    const isHighLevel = userLevel >= 3; // 고수 레벨 이상
+                    const todayUsageCount = RandomRecommendManager.getTodayUsageCount();
                     
-                    if (!isHighLevel) {
-                        showToast('다시뽑기는 고수 레벨 이상만 이용할 수 있습니다.', 'error');
+                    // 레벨별 제한 설정
+                    let maxDailyUsage = 2; // 기본값: 레벨 1은 하루 2번
+                    if (userLevel >= 3) {
+                        maxDailyUsage = Infinity; // 고수 레벨 3단계 이상: 무제한
+                    } else if (userLevel >= 2) {
+                        maxDailyUsage = 10; // 미식가 레벨 2단계: 하루 10번
+                    } else {
+                        maxDailyUsage = 2; // 레벨 1: 하루 2번
+                    }
+                    
+                    // 제한 체크
+                    if (todayUsageCount >= maxDailyUsage) {
+                        if (userLevel < 3) {
+                            showToast(`하루에 ${maxDailyUsage}번만 랜덤 추천을 받을 수 있습니다.\n미식가 레벨 2단계는 10번, 고수 레벨 3단계 이상은 무제한 이용 가능합니다.`, 'error');
+                        }
                         return;
                     }
                     
                     showRandomRecommendation();
+                    // 사용 후 상태 업데이트
+                    setTimeout(updateRandomButtonState, 100);
                 });
             }
         });
