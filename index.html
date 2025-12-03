@@ -12212,7 +12212,11 @@
             const isGuest = UserManager.isGuestMode();
             
             if (isGuest || !user || user.isGuest) {
-                showToast('랜덤 추천은 로그인한 사용자만 이용할 수 있습니다.', 'error');
+                showToast('로그인 해야하는 서비스 입니다.', 'error');
+                // 로그인 화면으로 이동
+                setTimeout(() => {
+                    showScreen('login');
+                }, 500);
                 return;
             }
             
@@ -12293,12 +12297,12 @@
                 if (!randomBtn) return;
                 
                 if (isGuest || !user || user.isGuest) {
-                    // 로그인하지 않은 경우
-                    randomBtn.disabled = true;
-                    randomBtn.style.opacity = '0.5';
-                    randomBtn.style.cursor = 'not-allowed';
+                    // 로그인하지 않은 경우 - 버튼은 활성화하되 클릭 시 로그인 화면으로 이동
+                    randomBtn.disabled = false;
+                    randomBtn.style.opacity = '1';
+                    randomBtn.style.cursor = 'pointer';
                     if (randomSubtitle) {
-                        randomSubtitle.textContent = '로그인한 사용자만 이용할 수 있습니다.';
+                        randomSubtitle.textContent = '로그인 해야하는 서비스 입니다.';
                         randomSubtitle.style.color = '#EF4444';
                     }
                 } else {
@@ -12399,7 +12403,7 @@
                     const isGuest = UserManager.isGuestMode();
                     
                     if (isGuest || !user || user.isGuest) {
-                        showToast('랜덤 추천은 로그인한 사용자만 이용할 수 있습니다.', 'error');
+                        showToast('다시뽑기는 로그인한 사용자만 이용할 수 있습니다.', 'error');
                         return;
                     }
                     
